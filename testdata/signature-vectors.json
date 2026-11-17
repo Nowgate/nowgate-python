@@ -1,0 +1,235 @@
+{
+  "description": "Test vectors for Nowgate webhook signatures. Header: Nowgate-Signature: t=<unix seconds>,v1=<hex>. v1 is HMAC-SHA256 keyed with the UTF-8 bytes of the whole endpoint secret (including whsec_), over the ASCII decimal timestamp, a period, and the raw request body bytes. Accept a delivery if its timestamp is within tolerance_seconds of your clock and any v1 value matches; ignore other schemes; compare in constant time. Bodies here are UTF-8 strings; sign and verify their bytes exactly as sent.",
+  "tolerance_seconds": 300,
+  "errors": {
+    "timestamp": "timestamp outside the tolerance",
+    "mismatch": "no signature matches",
+    "malformed": "the header cannot be parsed",
+    "no_signature": "the header has no v1 value"
+  },
+  "vectors": [
+    {
+      "name": "valid",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880010,
+      "valid": true
+    },
+    {
+      "name": "valid at the edge of the tolerance",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880300,
+      "valid": true
+    },
+    {
+      "name": "too old",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880301,
+      "valid": false,
+      "error": "timestamp"
+    },
+    {
+      "name": "too far in the future",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793879699,
+      "valid": false,
+      "error": "timestamp"
+    },
+    {
+      "name": "body changed by one byte",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.6\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "mismatch"
+    },
+    {
+      "name": "body re-serialized with spaces",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\": \"evt_01m6k00000000000000000000a\", \"object\": \"event\", \"type\": \"payment.finished\", \"api_version\": \"2026-11-01\", \"environment\": \"test\", \"created_at\": \"2026-11-05T12:00:00Z\", \"data\": {\"object\": {\"id\": \"pay_01m6k00000000000000000000b\", \"object\": \"payment\", \"status\": \"finished\", \"amount\": \"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "mismatch"
+    },
+    {
+      "name": "timestamp changed",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880001,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "mismatch"
+    },
+    {
+      "name": "wrong secret",
+      "secrets": [
+        "whsec_ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "mismatch"
+    },
+    {
+      "name": "rotation: the receiver knows the old and new secret",
+      "secrets": [
+        "whsec_ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "rotation: two signatures, the second matches",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=6137f79e9e8b060ab41f0982e50c18f203719233b45232d0bd2b494d9702c7e5,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "unknown schemes are ignored",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v0=deadbeef,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e,v2=x",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "spaces after commas",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000, v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "non-ASCII body (UTF-8 bytes)",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"description\":\"Café für 2 — ✓\"}",
+      "header": "t=1793880000,v1=9fef5d6fecc03f4e91d14e79d471246fc1d5fa2c03c6c92a2a9acd66b1f61f85",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "empty body",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "",
+      "header": "t=1793880000,v1=ff534d1be53ad2d13d96f568b250179f9cbacd6bdc47a618d38fc7d628b0269a",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "no timestamp",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "two timestamps",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a50e",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "no v1 signature",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000",
+      "now": 1793880000,
+      "valid": false,
+      "error": "no_signature"
+    },
+    {
+      "name": "signature not hex",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "signature truncated",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204f3bf41b7da3944bf68b2275b99ef419986be5adefc3c8e2668081996a5",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "upper-case hex",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "t=1793880000,v1=1204F3BF41B7DA3944BF68B2275B99EF419986BE5ADEFC3C8E2668081996A50E",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "garbage",
+      "secrets": [
+        "whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      ],
+      "body": "{\"id\":\"evt_01m6k00000000000000000000a\",\"object\":\"event\",\"type\":\"payment.finished\",\"api_version\":\"2026-11-01\",\"environment\":\"test\",\"created_at\":\"2026-11-05T12:00:00Z\",\"data\":{\"object\":{\"id\":\"pay_01m6k00000000000000000000b\",\"object\":\"payment\",\"status\":\"finished\",\"amount\":\"10.5\"}}}",
+      "header": "garbage",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    }
+  ]
+}

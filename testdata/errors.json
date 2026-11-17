@@ -1,0 +1,198 @@
+{
+  "$comment": "Every problem code the API returns, with its HTTP status.",
+  "type_base": "https://docs.nowgate.io/errors/",
+  "errors": [
+    {
+      "code": "address_already_given",
+      "status": 409
+    },
+    {
+      "code": "amount_invalid",
+      "status": 422
+    },
+    {
+      "code": "amount_too_large",
+      "status": 422
+    },
+    {
+      "code": "amount_too_precise",
+      "status": 422
+    },
+    {
+      "code": "amount_too_small",
+      "status": 422
+    },
+    {
+      "code": "api_key_wrong_environment",
+      "status": 401
+    },
+    {
+      "code": "asset_disabled",
+      "status": 422
+    },
+    {
+      "code": "asset_not_supported",
+      "status": 422
+    },
+    {
+      "code": "attempt_limit",
+      "status": 429
+    },
+    {
+      "code": "authentication_required",
+      "status": 401
+    },
+    {
+      "code": "currency_not_supported",
+      "status": 422
+    },
+    {
+      "code": "destination_disabled",
+      "status": 409
+    },
+    {
+      "code": "emails_unavailable",
+      "status": 422
+    },
+    {
+      "code": "external_id_taken",
+      "status": 409
+    },
+    {
+      "code": "fee_estimate_unavailable",
+      "status": 503
+    },
+    {
+      "code": "idempotency_key_in_progress",
+      "status": 409
+    },
+    {
+      "code": "idempotency_key_required",
+      "status": 400
+    },
+    {
+      "code": "idempotency_key_reused",
+      "status": 422
+    },
+    {
+      "code": "insufficient_balance",
+      "status": 409
+    },
+    {
+      "code": "insufficient_scope",
+      "status": 403
+    },
+    {
+      "code": "internal_error",
+      "status": 500
+    },
+    {
+      "code": "invalid_api_key",
+      "status": 401
+    },
+    {
+      "code": "invalid_id",
+      "status": 400
+    },
+    {
+      "code": "invalid_items",
+      "status": 422
+    },
+    {
+      "code": "invalid_request",
+      "status": 400
+    },
+    {
+      "code": "invoice_not_payable",
+      "status": 409
+    },
+    {
+      "code": "ip_not_allowed",
+      "status": 403
+    },
+    {
+      "code": "link_inactive",
+      "status": 409
+    },
+    {
+      "code": "merchant_pending",
+      "status": 403
+    },
+    {
+      "code": "merchant_suspended",
+      "status": 403
+    },
+    {
+      "code": "method_not_allowed",
+      "status": 405
+    },
+    {
+      "code": "not_found",
+      "status": 404
+    },
+    {
+      "code": "not_refundable",
+      "status": 409
+    },
+    {
+      "code": "payout_limit_exceeded",
+      "status": 422
+    },
+    {
+      "code": "payout_not_cancelable",
+      "status": 409
+    },
+    {
+      "code": "plan_archived",
+      "status": 409
+    },
+    {
+      "code": "pool_exhausted",
+      "status": 503
+    },
+    {
+      "code": "rate_limited",
+      "status": 429
+    },
+    {
+      "code": "rate_unavailable",
+      "status": 503
+    },
+    {
+      "code": "refund_exceeds_refundable",
+      "status": 422
+    },
+    {
+      "code": "request_too_large",
+      "status": 413
+    },
+    {
+      "code": "subscription_canceled",
+      "status": 409
+    },
+    {
+      "code": "subscription_limit",
+      "status": 429
+    },
+    {
+      "code": "too_many_destinations",
+      "status": 409
+    },
+    {
+      "code": "unknown_field",
+      "status": 400
+    },
+    {
+      "code": "unsupported_media_type",
+      "status": 415
+    },
+    {
+      "code": "uri_too_long",
+      "status": 414
+    },
+    {
+      "code": "validation_failed",
+      "status": 422
+    }
+  ]
+}

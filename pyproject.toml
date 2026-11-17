@@ -1,0 +1,47 @@
+[build-system]
+requires = ["flit_core==4.2.0"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "nowgate"
+version = "0.1.0"
+description = "The Nowgate API's Python SDK: payments, payment links, payouts and refunds, with webhook verification. No dependencies."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = []
+authors = [{ name = "Nowgate" }]
+keywords = ["nowgate", "payments", "crypto", "stablecoins", "webhooks", "sdk"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://nowgate.io"
+Documentation = "https://docs.nowgate.io/sdks/python"
+Changelog = "https://docs.nowgate.io/changelog"
+Source = "https://github.com/Nowgate/nowgate-python"
+Issues = "https://github.com/Nowgate/nowgate-python/issues"
+
+# The source archive holds the package, its README and pyproject.toml, as flit_core builds it,
+# and the changelog.
+[tool.flit.sdist]
+include = ["CHANGELOG.md"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+mypy_path = "src"
+files = ["src", "tests"]

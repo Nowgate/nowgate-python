@@ -1,0 +1,204 @@
+{
+  "description": "Signature headers beyond the published vectors (api/webhooks/signature-vectors.json), with the answers of the engine's reference verifier (webhooks/signing.Verify, whose tests check this file). Every SDK must give the same answers. The secret and body are test values.",
+  "tolerance_seconds": 300,
+  "vectors": [
+    {
+      "name": "a plus sign before the timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=+1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "leading zeros in the timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=0001793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "a leading NEL (U+0085), which Go trims",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "\u0085t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "a leading byte order mark (U+FEFF), which Go doesn't trim",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "\ufefft=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a trailing comma",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4,",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "an empty header",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a zero timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=0,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a negative timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=-5,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a timestamp beyond 64 bits",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=99999999999999999999,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "the largest 64-bit timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=9223372036854775807,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "timestamp"
+    },
+    {
+      "name": "a space before t's equals sign",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t =1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a space after t's equals sign",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t= 1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "a second v1 that isn't hex",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4,v1=zz",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "spaces around every part",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": " t=1793880000 , v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4 ",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "a trailing no-break space (U+00A0), which Go trims",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4\u00a0",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "an empty scheme name",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,=x,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "a semicolon instead of a comma",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000;v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "an unknown v2 after the signature",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4,v2=garbage",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "an upper-case V1 is another scheme",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,V1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "no_signature"
+    },
+    {
+      "name": "a timestamp ten times later",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=17938800000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": false,
+      "error": "timestamp"
+    },
+    {
+      "name": "mixed-case hex",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=F2C14EF784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4",
+      "now": 1793880000,
+      "valid": true
+    },
+    {
+      "name": "a second timestamp after the signature",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "t=1793880000,v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4,t=1793880000",
+      "now": 1793880000,
+      "valid": false,
+      "error": "malformed"
+    },
+    {
+      "name": "the signature before the timestamp",
+      "secrets": ["whsec_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"],
+      "body": "{\"id\":\"evt_x\",\"type\":\"payment.finished\"}",
+      "header": "v1=f2c14ef784e42a9b9fb89ec765d1a3bdd492fc801bf2a7a31f3584e106f296a4,t=1793880000",
+      "now": 1793880000,
+      "valid": true
+    }
+  ]
+}

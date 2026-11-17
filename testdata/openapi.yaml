@@ -1,0 +1,2782 @@
+openapi: 3.1.0
+info:
+  title: Nowgate API
+  version: 2026-11-01
+  summary: Accept crypto payments on nine networks with one API.
+  description: |
+    The Nowgate merchant API. Create a payment, show its deposit address to your
+    customer, and receive a signed webhook when it is paid.
+
+    **Conventions**
+    - Authenticate with `Authorization: Bearer <API key>`. Keys are environment
+      specific: `ngk_live_…` keys work only on the live API, `ngk_sandbox_…` only on
+      the sandbox (testnets).
+    - Every `POST` requires an `Idempotency-Key` header. Repeating a request with the
+      same key returns the original response; reusing a key with a different request
+      is an error.
+    - Amounts are decimal strings in the asset's units (`"12.5"` USDT), never numbers.
+      Extra decimal places are rejected, not rounded.
+    - Errors use RFC 9457 problem details (`application/problem+json`) with a stable
+      `code`.
+    - Lists are newest first and paginate with `starting_after` / `ending_before`.
+    - Every operation may answer `429 rate_limited` with `Retry-After`, the seconds to
+      wait before retrying. Each API key may make 25 reads (`GET`) and 10 writes a
+      second, in bursts of up to 50 and 20, and each client address 50 requests a
+      second, in bursts of up to 100. An address that presents 20 refused keys in a
+      minute waits before its keys are checked again.
+  contact:
+    name: Nowgate
+servers:
+  - url: https://api.nowgate.io/v1
+    description: Live
+  - url: https://sandbox-api.nowgate.io/v1
+    description: Sandbox on testnets
+security:
+  - apiKey: []
+tags:
+  - name: Status
+  - name: Assets
+  - name: Payments
+  - name: Rates
+  - name: Payouts
+  - name: Refunds
+
+paths:
+  /status:
+    get:
+      operationId: getStatus
+      summary: Service and network status
+      tags: [Status]
+      security: []
+      responses:
+        "200":
+          description: Status of the API and of each network's watcher.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /assets:
+    get:
+      operationId: listAssets
+      summary: Supported networks and assets
+      tags: [Assets]
+      security: []
+      responses:
+        "200":
+          description: Every network-asset pair you can accept.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payment-links:
+    post:
+      operationId: createPaymentLink
+      summary: Create a payment link
+      description: |
+        A reusable checkout page that never expires. Each attempt on it is an ordinary
+        payment that names the link in `payment_link`, with its own quote, and sends you
+        its events like any payment. Price it in a currency (`price_amount` and
+        `price_currency`; the payer picks an asset), in an asset (`amount`, `network`
+        and `asset`; only that asset), or leave the amount open for donations
+        (`open_amount`). Give exactly one of the three.
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentLinkRequest" }
+      responses:
+        "201":
+          description: The link.
+          headers:
+            Location: { schema: { type: string }, description: The link's URL. }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPaymentLinks
+      summary: List payment links
+      description: Your payment links, newest first.
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/StartingAfter"
+        - $ref: "#/components/parameters/EndingBefore"
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/PaymentLinkStatus" } }
+      responses:
+        "200":
+          description: A page of links.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLinkList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payment-links/{id}:
+    get:
+      operationId: getPaymentLink
+      summary: Retrieve a payment link
+      tags: [Payment links]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PaymentLinkID" } }
+      responses:
+        "200":
+          description: The link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updatePaymentLink
+      summary: Update a payment link
+      description: |
+        Changes the fields you send and leaves the rest. A new price applies to new
+        attempts only; payments already made keep theirs. Set `status` to `inactive` to
+        stop new attempts while the link's payments complete. Send an empty string to
+        clear `description`, `order_id_prefix`, `success_url` or `cancel_url`. `branding`,
+        `donations` and `open_amount` replace the whole object.
+      tags: [Payment links]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PaymentLinkID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePaymentLinkRequest" }
+      responses:
+        "200":
+          description: The link, updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentLink" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /branding/logos:
+    post:
+      operationId: createLogo
+      summary: Upload a logo
+      description: |
+        A PNG or JPEG of at most 2048 × 2048 pixels, as base64, within the 64 KiB request
+        limit. Nowgate decodes it, scales it to fit 512 × 512 and stores it re-encoded as
+        PNG: checkout never serves what you sent. Use its ID in a link's `branding`.
+      tags: [Payment links]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLogoRequest" }
+      responses:
+        "201":
+          description: The logo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Logo" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /sandbox/payments/{id}/simulate:
+    post:
+      operationId: simulatePayment
+      summary: Simulate a payer (sandbox)
+      description: |
+        In the sandbox (and dev and test), makes up what a payer does to one of your
+        payments, so you can test every case without testnet coins. A simulated deposit
+        is pending at first and settles about 10 seconds later; from then on it is
+        processed like any deposit, with the same statuses, credits and webhooks.
+        Simulated money is never swept. In live this route doesn't exist: `404`.
+      tags: [Sandbox]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PaymentID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SimulateRequest" }
+      responses:
+        "202":
+          description: Done; a deposit, if any, settles shortly.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Simulation" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /sandbox/payouts/{id}/simulate:
+    post:
+      operationId: simulatePayout
+      summary: Fail a payout (sandbox)
+      description: |
+        In the sandbox, where payouts are simulated (sent at once, finished about 10
+        seconds later, and never on a chain), fails one of your payouts that hasn't
+        finished: one waiting or scheduled, or one within its 10 seconds of sending. Its
+        amount and fees return to your available balance, and `payout.failed` is sent,
+        with `failure_reason` `simulated_failure`. Where payouts are sent for real, this
+        route doesn't exist: `404`.
+      tags: [Sandbox]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PayoutID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SimulatePayoutRequest" }
+      responses:
+        "200":
+          description: The failed payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /sandbox/payout-destinations/{id}/activate:
+    post:
+      operationId: activatePayoutDestination
+      summary: Activate a destination now (sandbox)
+      description: |
+        In the sandbox, makes one of your destinations that still waits usable at once,
+        instead of 5 minutes after it was added, and queues the payouts that waited for
+        it. `destination.active` is sent. Where payouts are sent for real, this route
+        doesn't exist: `404`.
+      tags: [Sandbox]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PayoutDestinationID" } }
+      responses:
+        "200":
+          description: The destination, now active.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestination" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /rates:
+    get:
+      operationId: listRates
+      summary: List rates
+      description: |
+        Each price asset's newest rate in USD and EUR, from Nowgate's own rate engine:
+        Chainlink and Pyth feeds and exchange pools on the networks Nowgate follows,
+        every read verified by a second operator. An asset has a rate only when two
+        independent families of sources agree, one of them an oracle; otherwise
+        `available` is false and `reason` says why.
+      tags: [Rates]
+      responses:
+        "200":
+          description: Every price asset's newest round.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RateList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /estimate:
+    get:
+      operationId: getEstimate
+      summary: Estimate a fiat price
+      description: |
+        What a payment priced in a currency would expect in an asset if created now. It
+        takes no snapshot and holds nothing: the payment's own quote is taken when it is
+        created.
+      tags: [Rates]
+      parameters:
+        - { name: network, in: query, required: true, schema: { $ref: "#/components/schemas/Network" } }
+        - { name: asset, in: query, required: true, schema: { $ref: "#/components/schemas/AssetSymbol" } }
+        - { name: price_amount, in: query, required: true, schema: { $ref: "#/components/schemas/FiatAmount" } }
+        - { name: price_currency, in: query, required: true, schema: { type: string } }
+        - { name: markup_bps, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 1000 } }
+        - { name: fee_paid_by, in: query, required: false, schema: { $ref: "#/components/schemas/FeePaidBy" } }
+      responses:
+        "200":
+          description: The estimate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Estimate" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /min-amount:
+    get:
+      operationId: getMinAmount
+      summary: Get an asset's minimum
+      description: The smallest amount a payment in the asset may expect, and its value in a currency at the newest rate.
+      tags: [Rates]
+      parameters:
+        - { name: network, in: query, required: true, schema: { $ref: "#/components/schemas/Network" } }
+        - { name: asset, in: query, required: true, schema: { $ref: "#/components/schemas/AssetSymbol" } }
+        - { name: currency, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: The minimum.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinAmount" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payments:
+    post:
+      operationId: createPayment
+      summary: Create a payment
+      description: |
+        Issues a deposit address for one network-asset pair and an expected amount. Show the address to your customer; the payment moves to
+        `finished` once the funds are confirmed.
+
+        Price the payment in the asset (`amount`) or in a currency (`price_amount` and
+        `price_currency`), never both. A fiat price is converted once, at creation, with
+        Nowgate's own rates, and the converted amount holds for the payment's window:
+        20 minutes by default, at most an hour. When no rate can be had right now, the
+        request fails with `rate_unavailable` (503) and can be retried.
+      tags: [Payments]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+      responses:
+        "201":
+          description: The payment was created.
+          headers:
+            Location:
+              description: URL of the new payment.
+              schema: { type: string }
+            Idempotent-Replayed:
+              description: Present and `true` when this is a stored response for a repeated request.
+              schema: { type: string, enum: ["true"] }
+            Original-Request-Id:
+              description: On a replayed response, the ID of the request that created it.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPayments
+      summary: List payments
+      tags: [Payments]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/StartingAfter"
+        - $ref: "#/components/parameters/EndingBefore"
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/PaymentStatus" }
+        - name: order_id
+          in: query
+          required: false
+          schema: { type: string, maxLength: 255 }
+      responses:
+        "200":
+          description: A page of payments, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payments/{id}:
+    get:
+      operationId: getPayment
+      summary: Retrieve a payment
+      tags: [Payments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PaymentID" }
+      responses:
+        "200":
+          description: The payment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /balances:
+    get:
+      operationId: listBalances
+      summary: List balances
+      description: |
+        Your balance of every asset you hold: `available` is free to pay out, `pending` is
+        credited on a network with depth-based finality (Bitcoin) but not yet at its settle
+        depth, and `reserved` is held for payouts and refunds under way.
+      tags: [Payouts]
+      responses:
+        "200":
+          description: Your balances, one per asset you have held.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BalanceList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payout-destinations:
+    post:
+      operationId: createPayoutDestination
+      summary: Add a payout destination
+      description: |
+        An address of yours that payouts can pay. A new destination waits before it can be
+        paid: 24 hours in live, 5 minutes in the sandbox. `destination.created` reaches your
+        webhook endpoint at once, so your own systems can raise an alarm about an address
+        nobody meant to add, and `destination.active` follows when it can be paid. Adding an
+        address you already have returns that destination with `200`.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePayoutDestinationRequest" }
+      responses:
+        "200":
+          description: You already had this destination.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestination" }
+        "201":
+          description: The destination, waiting until it can be paid.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestination" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPayoutDestinations
+      summary: List payout destinations
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: starting_after
+          in: query
+          required: false
+          description: Return the page after (older than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutDestinationID" }
+        - name: ending_before
+          in: query
+          required: false
+          description: Return the page before (newer than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutDestinationID" }
+      responses:
+        "200":
+          description: A page of destinations, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestinationList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payout-destinations/{id}:
+    get:
+      operationId: getPayoutDestination
+      summary: Retrieve a payout destination
+      tags: [Payouts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PayoutDestinationID" }
+      responses:
+        "200":
+          description: The destination.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestination" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: disablePayoutDestination
+      summary: Disable a payout destination
+      description: |
+        Disables the destination at once. Payouts to it that haven't been sent fail with
+        `destination_disabled`, and their amounts return to your available balance. A payout
+        already sent can't be stopped. To pay the address again, add it again: it waits
+        like any new destination.
+      tags: [Payouts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PayoutDestinationID" }
+      responses:
+        "200":
+          description: The disabled destination.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutDestination" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payouts:
+    post:
+      operationId: createPayout
+      summary: Create a payout
+      description: |
+        Pays an amount of an asset you hold to one of your destinations, given by its ID or by
+        its address (a new address becomes a destination, and waits). The amount is reserved
+        from your available balance at once. `network_fee` is quoted in the payout's own
+        asset now, as the most the network can take; once the payout is finished it is what
+        the network took, and the rest returns to your balance. By default you pay it on top
+        (`fee_paid_by: merchant`), or the quote comes out of the amount (`payee`).
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePayoutRequest" }
+      responses:
+        "201":
+          description: The payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPayouts
+      summary: List payouts
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: starting_after
+          in: query
+          required: false
+          description: Return the page after (older than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutID" }
+        - name: ending_before
+          in: query
+          required: false
+          description: Return the page before (newer than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutID" }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/PayoutStatus" }
+        - name: batch
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/PayoutBatchID" }
+      responses:
+        "200":
+          description: A page of payouts, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payouts/{id}:
+    get:
+      operationId: getPayout
+      summary: Retrieve a payout
+      tags: [Payouts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PayoutID" }
+      responses:
+        "200":
+          description: The payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payouts/{id}/cancel:
+    post:
+      operationId: cancelPayout
+      summary: Cancel a payout
+      description: |
+        Cancels a payout that hasn't been sent yet, and returns its reserved amount to your
+        available balance. A payout being sent can't be canceled (`payout_not_cancelable`).
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PayoutID" }
+      responses:
+        "200":
+          description: The canceled payout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payout-batches:
+    post:
+      operationId: createPayoutBatch
+      summary: Create a batch of payouts
+      description: |
+        Up to 1,000 payouts at once, as `items` or as CSV text in `csv` (at most 256 KiB).
+        The CSV's header row names its columns, in this order: `network`, `asset`, `address`,
+        `amount`, `fee_paid_by` and `external_id`.
+        Every item is checked before any is created: one bad item refuses the whole batch with
+        `invalid_items`, listing every item's problem. Your limits apply to the batch's total,
+        and its amounts are reserved together. Each item becomes a payout with its own ID and
+        events. This request may be up to 512 KiB.
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePayoutBatchRequest" }
+      responses:
+        "201":
+          description: The batch, with its payouts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutBatch" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPayoutBatches
+      summary: List payout batches
+      tags: [Payouts]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: starting_after
+          in: query
+          required: false
+          description: Return the page after (older than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutBatchID" }
+        - name: ending_before
+          in: query
+          required: false
+          description: Return the page before (newer than) this ID.
+          schema: { $ref: "#/components/schemas/PayoutBatchID" }
+      responses:
+        "200":
+          description: A page of batches, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutBatchList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payout-batches/{id}:
+    get:
+      operationId: getPayoutBatch
+      summary: Retrieve a payout batch
+      tags: [Payouts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PayoutBatchID" }
+      responses:
+        "200":
+          description: The batch, with its items' counts by status. List its payouts with `GET /payouts?batch=`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutBatch" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /payments/{id}/refunds:
+    post:
+      operationId: createRefund
+      summary: Refund a payment
+      description: |
+        Returns a payment's asset to its payer, from your available balance: by default all
+        it credited (before Nowgate's fee, which Nowgate keeps) less its other refunds. The
+        network fee comes out of the refund unless you pay it (`fee_paid_by: merchant`).
+        Without the payer's `address`, the refund waits in `awaiting_address` with a
+        `refund_url` you send them, where they give it once. Their address then waits like
+        any new destination before it is paid: 24 hours in live.
+      tags: [Refunds]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/PaymentID" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRefundRequest" }
+      responses:
+        "201":
+          description: The refund, reserved from your balance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Refund" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /refunds:
+    get:
+      operationId: listRefunds
+      summary: List refunds
+      tags: [Refunds]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: starting_after
+          in: query
+          required: false
+          description: Return the page after (older than) this ID.
+          schema: { $ref: "#/components/schemas/RefundID" }
+        - name: ending_before
+          in: query
+          required: false
+          description: Return the page before (newer than) this ID.
+          schema: { $ref: "#/components/schemas/RefundID" }
+        - name: payment
+          in: query
+          required: false
+          description: Only this payment's refunds.
+          schema: { $ref: "#/components/schemas/PaymentID" }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/PayoutStatus" }
+      responses:
+        "200":
+          description: A page of refunds, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RefundList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /refunds/{id}:
+    get:
+      operationId: getRefund
+      summary: Retrieve a refund
+      tags: [Refunds]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RefundID" }
+      responses:
+        "200":
+          description: The refund.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Refund" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /refunds/{id}/cancel:
+    post:
+      operationId: cancelRefund
+      summary: Cancel a refund
+      description: |
+        Cancels a refund that hasn't been signed yet, from any status before `sending`, and
+        returns its amount to your available balance.
+      tags: [Refunds]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RefundID" }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The canceled refund.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Refund" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /forwarding:
+    get:
+      operationId: getForwarding
+      summary: Retrieve your forwarding rules
+      description: Your forwarding rules, one per asset you forward.
+      tags: [Payouts]
+      responses:
+        "200":
+          description: Your rules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Forwarding" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setForwarding
+      summary: Set your forwarding rules
+      description: |
+        Replaces your forwarding rules with these, all at once (an empty list stops
+        forwarding). A rule forwards an asset to one of your active destinations: in
+        `payment` mode each payment's credit as it reaches your available balance, in
+        `daily` mode your whole available balance once a day at `hour` UTC. Nothing under
+        `min_amount` is forwarded. Forwarding payouts are ordinary payouts with
+        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`), and
+        they never wait for approval.
+      tags: [Payouts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Forwarding" }
+      responses:
+        "200":
+          description: Your rules as set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Forwarding" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /plans:
+    post:
+      operationId: createPlan
+      summary: Create a plan
+      description: |
+        A plan is what a subscription costs and how often: a price in USD or EUR
+        (`price_amount`, `price_currency`) or in an asset (`amount`, `network`, `asset`),
+        an interval, and an optional free trial. The price and the interval never
+        change; make a new plan for a new price.
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePlanRequest" }
+      responses:
+        "201":
+          description: The plan.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listPlans
+      summary: List plans
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/StartingAfter"
+        - $ref: "#/components/parameters/EndingBefore"
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/PlanStatus" } }
+      responses:
+        "200":
+          description: A page of plans, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /plans/{id}:
+    get:
+      operationId: getPlan
+      summary: Get a plan
+      tags: [Subscriptions]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PlanID" } }
+      responses:
+        "200":
+          description: The plan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updatePlan
+      summary: Update a plan
+      description: |
+        Changes a plan's name, description, trial (for new subscriptions), assets,
+        markup, fee mode, metadata or status. The assets, markup and fee mode apply to
+        payments made after the change. An archived plan takes no new subscriptions;
+        its subscriptions carry on.
+      tags: [Subscriptions]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/PlanID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlanRequest" }
+      responses:
+        "200":
+          description: The plan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /subscriptions:
+    post:
+      operationId: createSubscription
+      summary: Create a subscription
+      description: |
+        Subscribes an email address to a plan. With a trial, the first invoice comes
+        before the trial ends; without one, the first invoice is issued at once, and
+        the subscription starts when it is paid: send the subscriber to
+        `latest_invoice.checkout_url`. Nowgate emails the subscriber their invoices and
+        reminders unless `emails` is false. At most 1,000 subscriptions a day per
+        merchant by default (`subscription_limit`).
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSubscriptionRequest" }
+      responses:
+        "201":
+          description: The subscription.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listSubscriptions
+      summary: List subscriptions
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/StartingAfter"
+        - $ref: "#/components/parameters/EndingBefore"
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SubscriptionStatus" } }
+        - { name: plan, in: query, schema: { $ref: "#/components/schemas/PlanID" } }
+        - { name: email, in: query, schema: { type: string, maxLength: 254 } }
+        - { name: external_id, in: query, schema: { type: string, maxLength: 100 } }
+      responses:
+        "200":
+          description: A page of subscriptions, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubscriptionList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /subscriptions/{id}:
+    get:
+      operationId: getSubscription
+      summary: Get a subscription
+      tags: [Subscriptions]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+      responses:
+        "200":
+          description: The subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateSubscription
+      summary: Update a subscription
+      description: |
+        Moves the subscription to another plan from the next period (no proration),
+        sets or undoes its cancellation at the end of the period, or changes the
+        subscriber's details, the emails switch or the metadata.
+      tags: [Subscriptions]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSubscriptionRequest" }
+      responses:
+        "200":
+          description: The subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /subscriptions/{id}/cancel:
+    post:
+      operationId: cancelSubscription
+      summary: Cancel a subscription at once
+      description: |
+        Ends the subscription now and voids its open invoice. Nothing is refunded
+        automatically: refund a payment with `POST /payments/{id}/refunds`. To end it
+        at the end of the period instead, update it with `cancel_at_period_end`.
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+      responses:
+        "200":
+          description: The canceled subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /subscriptions/{id}/rotate-link:
+    post:
+      operationId: rotateSubscriptionLink
+      summary: Replace the subscriber's link
+      description: |
+        Gives the subscription a new `subscriber_url`; the old link stops working at
+        once. For a subscriber whose link went astray.
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+      responses:
+        "200":
+          description: The subscription, with its new link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      summary: List invoices
+      tags: [Subscriptions]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/StartingAfter"
+        - $ref: "#/components/parameters/EndingBefore"
+        - { name: subscription, in: query, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/InvoiceStatus" } }
+      responses:
+        "200":
+          description: A page of invoices, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      summary: Get an invoice
+      tags: [Subscriptions]
+      parameters:
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/InvoiceID" } }
+      responses:
+        "200":
+          description: The invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /sandbox/subscriptions/{id}/simulate:
+    post:
+      operationId: simulateSubscription
+      summary: Move a subscription's time (sandbox)
+      description: |
+        In the sandbox (and dev and test), moves the subscription's whole timeline
+        earlier so that its next moment (`to: next`), or a named one, is now, then runs
+        its schedule at once: a year of renewals, reminders and dunning in a few calls.
+        In live this route doesn't exist: `404`.
+      tags: [Sandbox]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/SubscriptionID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SimulateSubscriptionRequest" }
+      responses:
+        "200":
+          description: The subscription after its schedule ran.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /sandbox/invoices/{id}/simulate:
+    post:
+      operationId: simulateInvoice
+      summary: Pay an invoice (sandbox)
+      description: |
+        In the sandbox (and dev and test), pays what remains of an open invoice: a
+        payment as the invoice's page makes one, in the given asset (the plan's own for
+        a price in an asset), then a simulated deposit of its amount. The payment
+        finishes about 10 seconds later, and the invoice with it. In live this route
+        doesn't exist: `404`.
+      tags: [Sandbox]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/InvoiceID" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SimulateInvoiceRequest" }
+      responses:
+        "202":
+          description: The payment made; its deposit settles shortly.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        default: { $ref: "#/components/responses/Error" }
+
+webhooks:
+  paymentEvent:
+    post:
+      operationId: paymentEvent
+      summary: Payment event (sent to your endpoint)
+      description: |
+        Nowgate POSTs an event to your endpoint whenever a payment changes. Verify the
+        `Nowgate-Signature` header before trusting the body:
+
+        `Nowgate-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>`
+
+        Reject events older than 5 minutes, compare signatures in constant time,
+        deduplicate by `id`, and use `data.object.version` to ignore stale events
+        (delivery order is not guaranteed). Before shipping goods, retrieve the payment
+        with `GET /payments/{id}`. Any 2xx response acknowledges the event; others are
+        retried for up to 72 hours.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Event" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+
+  payoutEvent:
+    post:
+      operationId: payoutEvent
+      summary: Payout event (sent to your endpoint)
+      description: |
+        Nowgate POSTs `payout.created`, then `payout.<status>` on every change of a payout's
+        status, signed and retried as payment events are. A payout with its own
+        `webhook_url` sends its events there instead.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PayoutEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+  refundEvent:
+    post:
+      operationId: refundEvent
+      summary: Refund event (sent to your endpoint)
+      description: |
+        Nowgate POSTs `refund.created`, then `refund.<status>` on every change of a refund's
+        status, signed and retried as payment events are. A refund with its own
+        `webhook_url` sends its events there instead. The payment gets `payment.refunded`
+        once its refunds return all it credited.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+  destinationEvent:
+    post:
+      operationId: destinationEvent
+      summary: Payout destination event (sent to your endpoint)
+      description: |
+        `destination.created` as soon as a destination is added, so you can raise an alarm
+        about an address nobody meant to add; `destination.active` when it can be paid;
+        `destination.disabled` when it is disabled.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DestinationEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+  batchEvent:
+    post:
+      operationId: batchEvent
+      summary: Payout batch event (sent to your endpoint)
+      description: |
+        `batch.created` when a batch is created, and `batch.finished` once every item is
+        final. Each item also sends its own payout events.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+  subscriptionEvent:
+    post:
+      operationId: subscriptionEvent
+      summary: Subscription event (sent to your endpoint)
+      description: |
+        Nowgate POSTs `subscription.created`, `subscription.<status>` on every change of
+        a subscription's status (`active`, `past_due`, `unpaid`, `canceled`),
+        `subscription.renewed` when a period begins paid for, and
+        `subscription.updated` when its plan, cancellation, subscriber or emails switch
+        changes. Signed and retried as payment events are.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubscriptionEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+  invoiceEvent:
+    post:
+      operationId: invoiceEvent
+      summary: Invoice event (sent to your endpoint)
+      description: |
+        Nowgate POSTs `invoice.created` when a subscription's invoice is issued,
+        `invoice.paid` once its payments are worth its amount, `invoice.void` when it
+        won't be paid, and `invoice.reopened` in the rare case that a payment it
+        counted is reversed. The invoice's payments send their own payment events.
+      parameters:
+        - name: Nowgate-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Nowgate-Event-Id
+          in: header
+          required: true
+          schema: { $ref: "#/components/schemas/EventID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvoiceEventBody" }
+      responses:
+        "200":
+          description: Any 2xx acknowledges the event.
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: An API key, `ngk_<environment>_<secret>`.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        A unique key for this request, such as a UUID: 1-255 visible ASCII characters, without
+        spaces. Retrying with the same key and the same request replays the original response
+        (for at least 24 hours); the same key with a different request is refused with
+        `422 idempotency_key_reused`. Failed requests are not stored, so they can be retried
+        with the same key.
+      schema: { type: string, minLength: 1, maxLength: 255, pattern: "^[!-~]+$" }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    StartingAfter:
+      name: starting_after
+      in: query
+      required: false
+      description: Return the page after (older than) this ID.
+      schema: { $ref: "#/components/schemas/PaymentID" }
+    EndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      description: Return the page before (newer than) this ID.
+      schema: { $ref: "#/components/schemas/PaymentID" }
+
+  responses:
+    Error:
+      description: |
+        An error, as RFC 9457 problem details. Any operation may answer
+        `429 rate_limited` when a rate limit is reached, with `Retry-After` giving the
+        seconds to wait before retrying.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Amount:
+      type: string
+      description: A non-negative decimal amount in the asset's units, e.g. "12.5".
+      pattern: "^(0|[1-9][0-9]{0,77})(\\.[0-9]+)?$"
+      examples: ["12.5"]
+    PaymentID:
+      type: string
+      pattern: "^pay_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["pay_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    TransferID:
+      type: string
+      pattern: "^trf_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    EventID:
+      type: string
+      pattern: "^evt_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    Timestamp:
+      type: string
+      format: date-time
+    Network:
+      type: string
+      description: Network identifier; see GET /assets. New networks may be added.
+      examples: ["tron"]
+    AssetSymbol:
+      type: string
+      description: Asset symbol on the network; see GET /assets.
+      examples: ["USDT"]
+
+    Status:
+      type: object
+      additionalProperties: false
+      required: [object, status, networks]
+      properties:
+        object: { type: string, const: status }
+        status:
+          type: string
+          enum: [operational, degraded, unavailable]
+        networks:
+          type: array
+          items: { $ref: "#/components/schemas/NetworkStatus" }
+    NetworkStatus:
+      type: object
+      additionalProperties: false
+      required: [network, status]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        status:
+          type: string
+          enum: [operational, degraded, halted, unavailable]
+        height:
+          type: integer
+          format: int64
+          description: The latest block height the watcher has processed.
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+
+    Asset:
+      type: object
+      additionalProperties: false
+      required: [network, network_name, asset, kind, decimals, min_amount, confirmation]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        network_name: { type: string, examples: ["TRON"] }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        kind:
+          type: string
+          enum: [native, token]
+        decimals: { type: integer, minimum: 0, maximum: 36 }
+        min_amount: { $ref: "#/components/schemas/Amount" }
+        confirmation:
+          type: string
+          description: How deposits are judged final ("finality", or a block count).
+          examples: ["finality", "1 block (3 from 0.01, 6 from 1)"]
+    AssetList:
+      type: object
+      additionalProperties: false
+      required: [object, data]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Asset" }
+
+    CreatePaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [network, asset]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount:
+          $ref: "#/components/schemas/Amount"
+          description: The price in the asset. Give this or `price_amount`, not both.
+        price_amount:
+          $ref: "#/components/schemas/FiatAmount"
+          description: The price in `price_currency`, converted at creation. Give this or `amount`, not both.
+        price_currency:
+          type: string
+          description: The currency of `price_amount`. USD or EUR.
+          examples: ["USD"]
+        markup_bps:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Added to a fiat price's converted amount, in basis points, for example to cover volatility.
+        fee_paid_by:
+          $ref: "#/components/schemas/FeePaidBy"
+        order_id:
+          type: string
+          maxLength: 255
+          description: Your reference for this payment.
+        description:
+          type: string
+          maxLength: 1000
+        expires_in:
+          type: integer
+          minimum: 900
+          maximum: 86400
+          description: "Seconds until the payment expires (default: your account setting, usually 3600; for a fiat price, 1200, and at most 3600)."
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+        webhook_url:
+          type: string
+          maxLength: 2048
+          description: |
+            Where this payment's events go, instead of to your webhook endpoints: an https URL
+            without credentials or a fragment. Deliveries are signed with your default
+            endpoint's secret, so you verify them as you verify every other delivery; without a
+            default endpoint the field is refused.
+          examples: ["https://shop.example/orders/1042/webhook"]
+
+    FiatAmount:
+      type: string
+      description: An amount of a currency with at most two decimal places, e.g. "25.00".
+      pattern: "^(0|[1-9][0-9]{0,8})(\\.[0-9]{1,2})?$"
+      examples: ["25.00"]
+    FeePaidBy:
+      type: string
+      enum: [merchant, payer]
+      description: |
+        Who bears Nowgate's fee. With `payer`, the payer sends enough for you to receive the
+        whole price after the fee. The default is `merchant`.
+    Price:
+      type: object
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount: { $ref: "#/components/schemas/FiatAmount" }
+        currency: { type: string, examples: ["USD"] }
+    Quote:
+      type: object
+      additionalProperties: false
+      description: How a fiat price was converted. The amount holds until the payment expires.
+      required: [rate, currency, rate_at, markup_bps]
+      properties:
+        rate:
+          type: string
+          description: The currency's price of one whole unit of the asset, as a decimal.
+          examples: ["2232.05"]
+        currency: { type: string, examples: ["USD"] }
+        rate_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When the rate was measured.
+        markup_bps: { type: integer }
+    Rate:
+      type: object
+      additionalProperties: false
+      required: [asset, available, families, par, rate_at]
+      properties:
+        asset:
+          type: string
+          description: The price asset (BTC, ETH, USDC, ..., and EUR itself).
+          examples: ["ETH"]
+        available: { type: boolean }
+        usd:
+          type: string
+          description: USD per whole unit, as a decimal. Present when available.
+          examples: ["2232.05"]
+        eur:
+          type: string
+          description: EUR per whole unit, as a decimal. Present when available and EUR is too.
+        reason:
+          type: string
+          description: |
+            Why there is no rate, when not available: too_few_sources, sources_disagree,
+            no_oracle, jump_hold, depeg, stale or no_round.
+        families:
+          type: integer
+          minimum: 0
+          description: |
+            How many independent families of sources the round rests on, outliers left out.
+            An available rate always has at least two, one of them an oracle.
+        par:
+          type: boolean
+          description: True for a stablecoin priced at exactly 1 USD because its sources put it within 0.5 % of that.
+        rate_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When the round was measured.
+    RateList:
+      type: object
+      additionalProperties: false
+      required: [object, data]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Rate" }
+    Estimate:
+      type: object
+      additionalProperties: false
+      required: [network, asset, amount, price, quote, fee_paid_by]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount:
+          $ref: "#/components/schemas/Amount"
+          description: What a payment created now would expect.
+        price: { $ref: "#/components/schemas/Price" }
+        quote: { $ref: "#/components/schemas/Quote" }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+    MinAmount:
+      type: object
+      additionalProperties: false
+      required: [network, asset, min_amount]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        min_amount: { $ref: "#/components/schemas/Amount" }
+        fiat:
+          $ref: "#/components/schemas/Price"
+          description: The minimum's value in the currency asked for, at the newest rate, rounded up to the cent.
+    PaymentLinkID:
+      type: string
+      pattern: "^plink_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["plink_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    LogoID:
+      type: string
+      pattern: "^logo_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    PaymentLinkStatus:
+      type: string
+      enum: [active, inactive]
+    Pair:
+      type: object
+      additionalProperties: false
+      required: [network, asset]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+    OpenAmount:
+      type: object
+      additionalProperties: false
+      required: [currency]
+      description: |
+        An open amount, for donations: the payer picks one of `presets` or, with `custom`,
+        enters an amount between `min` and `max`.
+      properties:
+        currency:
+          type: string
+          description: USD or EUR.
+          examples: ["USD"]
+        presets:
+          type: array
+          maxItems: 6
+          items: { $ref: "#/components/schemas/FiatAmount" }
+          description: Up to six amounts to offer, shown in ascending order.
+        custom:
+          type: boolean
+          description: Whether the payer may enter an amount of their own.
+        min: { $ref: "#/components/schemas/FiatAmount" }
+        max: { $ref: "#/components/schemas/FiatAmount" }
+    BrandingInput:
+      type: object
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          maxLength: 100
+          description: The name checkout shows; your account name if left out.
+        accent_color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          examples: ["#f97316"]
+        logo: { $ref: "#/components/schemas/LogoID" }
+    Branding:
+      type: object
+      additionalProperties: false
+      properties:
+        display_name: { type: string }
+        accent_color: { type: string }
+        text_color:
+          type: string
+          description: The text color checkout uses on the accent, chosen for WCAG AA contrast.
+        logo: { $ref: "#/components/schemas/LogoID" }
+    Donations:
+      type: object
+      additionalProperties: false
+      properties:
+        messages:
+          type: boolean
+          description: Whether a donor may leave a name and a message (up to 280 characters).
+        anonymous:
+          type: boolean
+          description: Whether a donor may give anonymously. Their name is then never stored.
+    CreatePaymentLinkRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 1000 }
+        price_amount:
+          $ref: "#/components/schemas/FiatAmount"
+          description: A fixed price in `price_currency`; the payer picks any of `assets`.
+        price_currency: { type: string, description: USD or EUR. }
+        amount:
+          $ref: "#/components/schemas/Amount"
+          description: A fixed amount of one asset, with `network` and `asset`.
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        open_amount: { $ref: "#/components/schemas/OpenAmount" }
+        assets:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Pair" }
+          description: The pairs a payer may choose for a price in a currency. Every pair Nowgate follows if left out.
+        markup_bps: { type: integer, minimum: 0, maximum: 1000 }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        expires_in:
+          type: integer
+          minimum: 900
+          maximum: 86400
+          description: Each attempt's window, as for a payment (for a price in a currency, at most 3600).
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+          description: Copied to every attempt's payment.
+        order_id_prefix:
+          type: string
+          maxLength: 40
+          description: Each attempt's `order_id` is the prefix, a dash and the attempt's number, such as `DONATE-17`.
+        branding: { $ref: "#/components/schemas/BrandingInput" }
+        success_url:
+          type: string
+          maxLength: 2048
+          description: An https URL checkout offers as a button once paid. Checkout never redirects on its own.
+        cancel_url:
+          type: string
+          maxLength: 2048
+          description: An https URL checkout offers to payers who leave.
+        receipts:
+          type: boolean
+          description: Whether checkout offers payers an emailed receipt.
+        donations: { $ref: "#/components/schemas/Donations" }
+    UpdatePaymentLinkRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        status: { $ref: "#/components/schemas/PaymentLinkStatus" }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 1000 }
+        price_amount: { $ref: "#/components/schemas/FiatAmount" }
+        price_currency: { type: string }
+        amount: { $ref: "#/components/schemas/Amount" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        open_amount: { $ref: "#/components/schemas/OpenAmount" }
+        assets:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Pair" }
+        markup_bps: { type: integer, minimum: 0, maximum: 1000 }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        expires_in: { type: integer, minimum: 900, maximum: 86400 }
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+        order_id_prefix: { type: string, maxLength: 40 }
+        branding: { $ref: "#/components/schemas/BrandingInput" }
+        success_url: { type: string, maxLength: 2048 }
+        cancel_url: { type: string, maxLength: 2048 }
+        receipts: { type: boolean }
+        donations: { $ref: "#/components/schemas/Donations" }
+    PaymentLink:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, title, pricing, assets, markup_bps, fee_paid_by, metadata, branding, receipts,
+                 donations, attempts, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/PaymentLinkID" }
+        object: { type: string, const: payment_link }
+        status: { $ref: "#/components/schemas/PaymentLinkStatus" }
+        title: { type: string }
+        description: { type: string }
+        pricing:
+          type: string
+          enum: [fiat, asset, open]
+          description: How the link is priced, in a currency, in an asset, or open.
+        price: { $ref: "#/components/schemas/Price" }
+        amount: { $ref: "#/components/schemas/Amount" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        open_amount: { $ref: "#/components/schemas/OpenAmount" }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/Pair" }
+          description: The pairs a payer may choose; empty means every pair Nowgate follows.
+        markup_bps: { type: integer }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        expires_in: { type: integer }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        order_id_prefix: { type: string }
+        branding: { $ref: "#/components/schemas/Branding" }
+        success_url: { type: string }
+        cancel_url: { type: string }
+        receipts: { type: boolean }
+        donations: { $ref: "#/components/schemas/Donations" }
+        attempts:
+          type: integer
+          description: How many payments have been made on the link.
+        checkout_url:
+          type: string
+          description: The link's checkout page, to share. Anyone with it can make payments on the link.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    PaymentLinkList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentLink" }
+        has_more: { type: boolean }
+    CreateLogoRequest:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: string
+          description: The PNG or JPEG file, base64-encoded (the standard alphabet, with padding).
+    Logo:
+      type: object
+      additionalProperties: false
+      required: [id, object, width, height, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/LogoID" }
+        object: { type: string, const: logo }
+        width: { type: integer }
+        height: { type: integer }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    Donor:
+      type: object
+      additionalProperties: false
+      required: [anonymous]
+      description: Who gave, as they chose to say. Plain text, as entered; escape it wherever you show it.
+      properties:
+        name: { type: string, description: Absent when the donor gave anonymously. }
+        message: { type: string }
+        anonymous: { type: boolean }
+    SimulateRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [pay, underpay, overpay, repeat, wrong_asset, late, expire]
+          description: |
+            `pay`: a deposit of exactly what is due. `underpay` and `overpay`: short or
+            over by `amount`, or by half. `repeat`: a second deposit after the payment
+            finished. `wrong_asset`: another asset of the network to the payment's
+            address, which goes to suspense. `late`: the payment expires now, then what was
+            due arrives. `expire`: the payment expires now.
+        amount:
+          $ref: "#/components/schemas/Amount"
+          description: In the payment's asset (the other asset's, for wrong_asset).
+    SimulatePayoutRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [fail]
+          description: "`fail`: the payout fails, and what it reserved is released."
+    Simulation:
+      type: object
+      additionalProperties: false
+      required: [object, action, payment]
+      properties:
+        object: { type: string, const: simulation }
+        action: { type: string }
+        payment: { $ref: "#/components/schemas/Payment" }
+        deposit:
+          type: object
+          additionalProperties: false
+          required: [asset, amount, settles_at]
+          description: The simulated deposit, when the action made one.
+          properties:
+            asset: { $ref: "#/components/schemas/AssetSymbol" }
+            amount: { $ref: "#/components/schemas/Amount" }
+            settles_at: { $ref: "#/components/schemas/Timestamp" }
+    PaymentStatus:
+      type: string
+      enum: [waiting, confirming, partially_paid, finished, expired, failed, refunded]
+    Deposit:
+      type: object
+      additionalProperties: false
+      required: [address]
+      properties:
+        address: { type: string }
+    Payment:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, network, asset, amount, amount_received, amount_pending, amount_credited,
+                 amount_refunded, refund_pending, fee, network_fee, fee_paid_by, deposit, late, overpaid, reversed, metadata, expires_at,
+                 created_at, updated_at, version]
+      properties:
+        id: { $ref: "#/components/schemas/PaymentID" }
+        object: { type: string, const: payment }
+        status: { $ref: "#/components/schemas/PaymentStatus" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount: { $ref: "#/components/schemas/Amount" }
+        amount_received:
+          $ref: "#/components/schemas/Amount"
+          description: Confirmed so far.
+        amount_pending:
+          $ref: "#/components/schemas/Amount"
+          description: Seen on-chain, not yet confirmed.
+        amount_credited:
+          $ref: "#/components/schemas/Amount"
+          description: Credited to your balance (before fees).
+        amount_refunded:
+          $ref: "#/components/schemas/Amount"
+          description: What finished refunds returned to the payer, in the payment's asset.
+        refund_pending:
+          $ref: "#/components/schemas/Amount"
+          description: What refunds under way will return to the payer.
+        fee:
+          $ref: "#/components/schemas/Amount"
+          description: Nowgate's fee on the credited amount.
+        network_fee:
+          $ref: "#/components/schemas/Amount"
+          description: Network costs, taken once from the credit.
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        price:
+          $ref: "#/components/schemas/Price"
+          description: Present when the payment is priced in a currency.
+        quote:
+          $ref: "#/components/schemas/Quote"
+          description: Present when the payment is priced in a currency.
+        subscription:
+          $ref: "#/components/schemas/SubscriptionID"
+          description: The subscription whose invoice this payment pays.
+        invoice:
+          $ref: "#/components/schemas/InvoiceID"
+          description: The invoice this payment pays (one of its attempts).
+        payment_link:
+          $ref: "#/components/schemas/PaymentLinkID"
+          description: Present on an attempt on a payment link.
+        checkout_url:
+          type: string
+          description: |
+            The payment's hosted checkout page, to send your customer to. Its token is a
+            capability for that page alone: anyone with the URL can see the payment's
+            checkout, and nothing else.
+        donor:
+          $ref: "#/components/schemas/Donor"
+          description: Present on a donation whose donor left a name or a message, or gave anonymously.
+        amount_counted:
+          $ref: "#/components/schemas/Amount"
+          description: |
+            Present when the payment is priced in a currency: what the confirmed funds count
+            for against `amount`. Funds that arrive after the payment expired are valued again
+            at the rate when Nowgate first saw them, so they can count for more or less than
+            they are. Your balance is always credited with every unit that arrived.
+        repricing_unavailable:
+          type: boolean
+          description: |
+            Present when the payment is priced in a currency: true when funds arrived after
+            expiry at a moment with no rate to value them at. They count for nothing until
+            you review the payment; your balance still holds them.
+        deposit: { $ref: "#/components/schemas/Deposit" }
+        late: { type: boolean, description: Funds arrived after the payment expired. }
+        overpaid: { type: boolean }
+        reversed: { type: boolean, description: A credit was reversed after a chain reorganization. }
+        order_id: { type: string }
+        description: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        closed_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        version:
+          type: integer
+          format: int64
+          description: Increases with every change; use it to ignore stale webhook events.
+    PaymentList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Payment" }
+        has_more: { type: boolean }
+
+    Event:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type:
+          type: string
+          description: payment.created, payment.<status>, payment.credited, payment.reversed or payment.deposit_accepted.
+          examples: ["payment.finished"]
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment:
+          type: string
+          enum: [live, sandbox, dev, test]
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/Payment" }
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, description: "A URL documenting the error code." }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          description: Stable, machine-readable error code.
+          examples: [validation_failed]
+        request_id: { type: string }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/FieldError" }
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [pointer, code, detail]
+      properties:
+        pointer: { type: string, description: "JSON Pointer to the offending field, e.g. /amount." }
+        code: { type: string }
+        detail: { type: string }
+
+    RefundID:
+      type: string
+      pattern: "^rf_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["rf_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    PayoutID:
+      type: string
+      pattern: "^po_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["po_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    PayoutBatchID:
+      type: string
+      pattern: "^pob_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    PayoutDestinationID:
+      type: string
+      pattern: "^dst_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+    PayoutFeePaidBy:
+      type: string
+      enum: [merchant, payee]
+      description: |
+        Who pays the network fee: `merchant` on top of the amount (the destination gets the
+        whole amount), or `payee` out of it.
+    PayoutStatus:
+      type: string
+      enum: [awaiting_address, awaiting_approval, scheduled, waiting_destination, queued, sending, finished,
+             failed, canceled]
+
+    Balance:
+      type: object
+      additionalProperties: false
+      required: [network, asset, available, pending, reserved]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        available:
+          $ref: "#/components/schemas/Amount"
+          description: Free to pay out.
+        pending:
+          $ref: "#/components/schemas/Amount"
+          description: Credited, not yet at the network's settle depth.
+        reserved:
+          $ref: "#/components/schemas/Amount"
+          description: Held for payouts and refunds under way.
+    BalanceList:
+      type: object
+      additionalProperties: false
+      required: [object, data]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Balance" }
+
+    ForwardingMode:
+      type: string
+      enum: [payment, daily]
+      description: "`payment` forwards each payment's credit; `daily` the whole available balance once a day."
+    ForwardingRule:
+      type: object
+      additionalProperties: false
+      required: [network, asset, destination, mode]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        destination:
+          $ref: "#/components/schemas/PayoutDestinationID"
+          description: An active destination of yours on the asset's network.
+        mode: { $ref: "#/components/schemas/ForwardingMode" }
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: The hour, UTC, of a `daily` rule; not given for `payment`.
+        min_amount:
+          $ref: "#/components/schemas/Amount"
+          description: Nothing smaller is forwarded (default 0); it stays in your balance.
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When the rule was first set; ignored in a request.
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When it last changed; ignored in a request.
+    Forwarding:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        object: { type: string, const: forwarding, description: Ignored in a request. }
+        rules:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ForwardingRule" }
+
+    CreatePayoutDestinationRequest:
+      type: object
+      additionalProperties: false
+      required: [network, address]
+      properties:
+        network: { $ref: "#/components/schemas/Network" }
+        address: { type: string, minLength: 1, maxLength: 128 }
+        label: { type: string, minLength: 1, maxLength: 100 }
+    PayoutDestination:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, network, address, kind, active_at, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/PayoutDestinationID" }
+        object: { type: string, const: payout_destination }
+        status:
+          type: string
+          enum: [pending, active, disabled]
+        network: { $ref: "#/components/schemas/Network" }
+        address: { type: string, description: The address in its canonical form. }
+        label: { type: string }
+        kind:
+          type: string
+          enum: [payout, refund]
+          description: "`refund` when a payer gave it for a refund."
+        active_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When it became, or will become, payable.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        disabled_at: { $ref: "#/components/schemas/Timestamp" }
+    PayoutDestinationList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutDestination" }
+        has_more: { type: boolean }
+
+    CreatePayoutRequest:
+      type: object
+      additionalProperties: false
+      required: [network, asset, amount]
+      properties:
+        destination:
+          $ref: "#/components/schemas/PayoutDestinationID"
+          description: One of your destinations; or give `address` instead.
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        address: { type: string, minLength: 1, maxLength: 128 }
+        amount: { $ref: "#/components/schemas/Amount" }
+        fee_paid_by: { $ref: "#/components/schemas/PayoutFeePaidBy" }
+        external_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Your own reference, unique among your payouts.
+        webhook_url:
+          type: string
+          description: This payout's events go here instead, signed with your default endpoint's secret.
+        send_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: Send no earlier than this, at most 30 days ahead.
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    Payout:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, network, asset, amount, amount_sent, network_fee, payout_fee, amount_debited,
+                 fee_paid_by, destination, metadata, created_at, updated_at, version]
+      properties:
+        id: { $ref: "#/components/schemas/PayoutID" }
+        object: { type: string, const: payout }
+        status: { $ref: "#/components/schemas/PayoutStatus" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount: { $ref: "#/components/schemas/Amount" }
+        amount_sent:
+          $ref: "#/components/schemas/Amount"
+          description: What the destination gets.
+        network_fee:
+          $ref: "#/components/schemas/Amount"
+          description: >-
+            The network fee, in this asset: quoted when the payout was created, as the most
+            it can be, and what the network took once the payout is finished.
+        payout_fee:
+          $ref: "#/components/schemas/Amount"
+          description: Nowgate's payout fee.
+        amount_debited:
+          $ref: "#/components/schemas/Amount"
+          description: >-
+            What your balance pays for it: reserved when the payout was created, less what
+            the network didn't take once it is finished.
+        fee_paid_by: { $ref: "#/components/schemas/PayoutFeePaidBy" }
+        destination: { $ref: "#/components/schemas/PayoutDestination" }
+        waiting_reason:
+          type: string
+          enum: [liquidity, gas_funding, fees, signer_limit]
+          description: Present on a queued payout that is waiting for something on Nowgate's side.
+        failure_reason: { type: string, description: Present on a failed payout. }
+        external_id: { type: string }
+        batch: { $ref: "#/components/schemas/PayoutBatchID" }
+        send_at: { $ref: "#/components/schemas/Timestamp" }
+        approved_at: { $ref: "#/components/schemas/Timestamp" }
+        transaction: { type: string, description: The transaction that carries it, once sent. }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        closed_at: { $ref: "#/components/schemas/Timestamp" }
+        version:
+          type: integer
+          format: int64
+          description: Increases with every change; use it to ignore stale webhook events.
+    PayoutList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Payout" }
+        has_more: { type: boolean }
+
+    PayoutBatchItem:
+      type: object
+      additionalProperties: false
+      required: [network, asset, amount]
+      properties:
+        destination: { $ref: "#/components/schemas/PayoutDestinationID" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        address: { type: string, minLength: 1, maxLength: 128 }
+        amount: { $ref: "#/components/schemas/Amount" }
+        fee_paid_by: { $ref: "#/components/schemas/PayoutFeePaidBy" }
+        external_id: { type: string, minLength: 1, maxLength: 100 }
+        webhook_url: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    CreatePayoutBatchRequest:
+      type: object
+      additionalProperties: false
+      description: Give `items` or `csv`, not both.
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/PayoutBatchItem" }
+        csv:
+          type: string
+          maxLength: 262144
+          description: The batch as CSV, its header row naming the columns as the operation describes.
+        send_at: { $ref: "#/components/schemas/Timestamp" }
+    PayoutBatch:
+      type: object
+      additionalProperties: false
+      required: [id, object, format, item_count, counts, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/PayoutBatchID" }
+        object: { type: string, const: payout_batch }
+        format: { type: string, enum: [json, csv] }
+        item_count: { type: integer }
+        counts:
+          type: object
+          description: The items' counts, by status.
+          additionalProperties: { type: integer }
+        send_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        finished_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When its last item became final.
+        items:
+          type: array
+          description: The batch's payouts, in the order given; only in the creating response.
+          items: { $ref: "#/components/schemas/Payout" }
+    PayoutBatchList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutBatch" }
+        has_more: { type: boolean }
+
+    CreateRefundRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        amount:
+          $ref: "#/components/schemas/Amount"
+          description: By default, all the payment can still return.
+        address:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The payer's address, when you have it; without it they give it on the refund's page.
+        fee_paid_by:
+          $ref: "#/components/schemas/PayoutFeePaidBy"
+          description: "`payee` by default: the network fee comes out of the refund."
+        external_id: { type: string, minLength: 1, maxLength: 100 }
+        webhook_url: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    Refund:
+      type: object
+      additionalProperties: false
+      required: [id, object, payment, status, network, asset, amount, amount_sent, network_fee, payout_fee, amount_debited,
+                 fee_paid_by, metadata, created_at, updated_at, version]
+      properties:
+        id: { $ref: "#/components/schemas/RefundID" }
+        object: { type: string, const: refund }
+        payment: { $ref: "#/components/schemas/PaymentID" }
+        status: { $ref: "#/components/schemas/PayoutStatus" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount: { $ref: "#/components/schemas/Amount" }
+        amount_sent:
+          $ref: "#/components/schemas/Amount"
+          description: What the payer gets.
+        network_fee:
+          $ref: "#/components/schemas/Amount"
+          description: >-
+            The network fee, in this asset: quoted when the refund was created, as the most
+            it can be, and what the network took once the refund is finished.
+        payout_fee:
+          $ref: "#/components/schemas/Amount"
+          description: Nowgate's payout fee.
+        amount_debited:
+          $ref: "#/components/schemas/Amount"
+          description: >-
+            What your balance pays for it: reserved when the refund was created, less what
+            the network didn't take once it is finished.
+        fee_paid_by: { $ref: "#/components/schemas/PayoutFeePaidBy" }
+        destination:
+          $ref: "#/components/schemas/PayoutDestination"
+          description: The payer's address, once given.
+        refund_url:
+          type: string
+          description: While it is awaiting_address, the page where the payer gives their address. Send it to them.
+        waiting_reason:
+          type: string
+          enum: [liquidity, gas_funding, fees, signer_limit]
+          description: Present on a queued refund that is waiting for something on Nowgate's side.
+        failure_reason: { type: string, description: Present on a failed refund. }
+        external_id: { type: string }
+        approved_at: { $ref: "#/components/schemas/Timestamp" }
+        transaction: { type: string, description: The transaction that carries it, once sent. }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        closed_at: { $ref: "#/components/schemas/Timestamp" }
+        version:
+          type: integer
+          format: int64
+          description: Increases with every change; use it to ignore stale webhook events.
+    RefundList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Refund" }
+        has_more: { type: boolean }
+    RefundEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: refund.created or refund.<status>., examples: ["refund.finished"] }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/Refund" }
+
+    PayoutEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: payout.created or payout.<status>., examples: ["payout.finished"] }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/Payout" }
+    DestinationEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: destination.created, destination.active or destination.disabled. }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/PayoutDestination" }
+    BatchEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: batch.created or batch.finished. }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/PayoutBatch" }
+    PlanID:
+      type: string
+      pattern: "^plan_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["plan_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    SubscriptionID:
+      type: string
+      pattern: "^sub_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["sub_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    InvoiceID:
+      type: string
+      pattern: "^in_[0-7][0-9a-hjkmnp-tv-z]{25}$"
+      examples: ["in_01jc3x6k2tf8yq0b5n2c7m9d4v"]
+    PlanStatus:
+      type: string
+      enum: [active, archived]
+    Interval:
+      type: string
+      enum: [day, week, month, year]
+    CreatePlanRequest:
+      type: object
+      additionalProperties: false
+      required: [name, interval]
+      description: Priced either in a currency (`price_amount`, `price_currency`) or in an asset (`amount`, `network`, `asset`).
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        price_amount: { $ref: "#/components/schemas/FiatAmount" }
+        price_currency: { type: string, examples: ["USD"] }
+        amount: { $ref: "#/components/schemas/Amount" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        interval: { $ref: "#/components/schemas/Interval" }
+        interval_count:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Intervals per period (1 by default). A period is a day to a year.
+        trial_days: { type: integer, minimum: 0, maximum: 365 }
+        assets:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Pair" }
+          description: For a price in a currency, the pairs a subscriber may pay with; every pair by default.
+        markup_bps: { type: integer, minimum: 0, maximum: 1000 }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+    UpdatePlanRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        status: { $ref: "#/components/schemas/PlanStatus" }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        trial_days: { type: integer, minimum: 0, maximum: 365 }
+        assets:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Pair" }
+        markup_bps: { type: integer, minimum: 0, maximum: 1000 }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+    Plan:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, name, interval, interval_count, trial_days, assets, markup_bps, fee_paid_by,
+                 metadata, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/PlanID" }
+        object: { type: string, const: plan }
+        status: { $ref: "#/components/schemas/PlanStatus" }
+        name: { type: string }
+        description: { type: string }
+        price: { $ref: "#/components/schemas/Price" }
+        amount: { $ref: "#/components/schemas/Amount" }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        interval: { $ref: "#/components/schemas/Interval" }
+        interval_count: { type: integer }
+        trial_days: { type: integer }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/Pair" }
+        markup_bps: { type: integer }
+        fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    PlanList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Plan" }
+        has_more: { type: boolean }
+    SubscriberInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, maxLength: 254 }
+        name: { type: string, maxLength: 100 }
+        locale:
+          type: string
+          enum: [en, es, pt-BR, fr, de, it, tr, ru, zh-CN, ja]
+          description: The language of the emails and of the subscriber's page; English by default.
+    Subscriber:
+      type: object
+      additionalProperties: false
+      required: [locale]
+      properties:
+        email:
+          type: string
+          description: Cleared 30 days after the subscription ends.
+        name: { type: string }
+        locale: { type: string }
+    SubscriptionStatus:
+      type: string
+      enum: [trialing, incomplete, active, past_due, unpaid, canceled]
+    CreateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [plan, subscriber]
+      properties:
+        plan: { $ref: "#/components/schemas/PlanID" }
+        subscriber: { $ref: "#/components/schemas/SubscriberInput" }
+        trial_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+          description: Overrides the plan's trial.
+        emails:
+          type: boolean
+          description: Whether Nowgate emails the subscriber (true by default).
+        external_id: { type: string, maxLength: 100 }
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+    UpdateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        plan:
+          $ref: "#/components/schemas/PlanID"
+        cancel_at_period_end: { type: boolean }
+        subscriber: { $ref: "#/components/schemas/SubscriberInput" }
+        emails: { type: boolean }
+        metadata:
+          type: object
+          maxProperties: 20
+          propertyNames: { minLength: 1, maxLength: 40 }
+          additionalProperties: { type: string, maxLength: 500 }
+    InvoiceSummary:
+      type: object
+      additionalProperties: false
+      required: [id, status, amount_due, amount_remaining, due_at]
+      properties:
+        id: { $ref: "#/components/schemas/InvoiceID" }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        amount_due: { $ref: "#/components/schemas/Amount" }
+        amount_remaining: { $ref: "#/components/schemas/Amount" }
+        due_at: { $ref: "#/components/schemas/Timestamp" }
+        checkout_url: { type: string }
+    Subscription:
+      type: object
+      additionalProperties: false
+      required: [id, object, status, plan, subscriber, emails, cancel_at_period_end, metadata, created_at, updated_at,
+                 version]
+      properties:
+        id: { $ref: "#/components/schemas/SubscriptionID" }
+        object: { type: string, const: subscription }
+        status: { $ref: "#/components/schemas/SubscriptionStatus" }
+        plan: { $ref: "#/components/schemas/PlanID" }
+        pending_plan:
+          $ref: "#/components/schemas/PlanID"
+          description: A plan change, applied from the next period.
+        subscriber: { $ref: "#/components/schemas/Subscriber" }
+        emails: { type: boolean }
+        trial_end: { $ref: "#/components/schemas/Timestamp" }
+        current_period_start: { $ref: "#/components/schemas/Timestamp" }
+        current_period_end: { $ref: "#/components/schemas/Timestamp" }
+        cancel_at_period_end: { type: boolean }
+        canceled_at: { $ref: "#/components/schemas/Timestamp" }
+        cancel_reason:
+          type: string
+          enum: [merchant, subscriber, unpaid, incomplete]
+        latest_invoice: { $ref: "#/components/schemas/InvoiceSummary" }
+        subscriber_url:
+          type: string
+          description: The subscriber's own page, to pay, cancel at the end of the period and see their invoices.
+        external_id: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        version: { type: integer }
+    SubscriptionList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Subscription" }
+        has_more: { type: boolean }
+    InvoiceStatus:
+      type: string
+      enum: [open, paid, void]
+    Invoice:
+      type: object
+      additionalProperties: false
+      required: [id, object, number, status, subscription, plan, amount_due, amount_paid, amount_remaining, overpaid,
+                 issued_at, due_at, payments, created_at, updated_at, version]
+      description: Amounts are in the currency (`currency`) or the asset (`network`, `asset`) of the plan's price.
+      properties:
+        id: { $ref: "#/components/schemas/InvoiceID" }
+        object: { type: string, const: invoice }
+        number: { type: string, examples: ["INV-000123"] }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        subscription: { $ref: "#/components/schemas/SubscriptionID" }
+        plan: { $ref: "#/components/schemas/PlanID" }
+        currency: { type: string, examples: ["USD"] }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+        amount_due: { $ref: "#/components/schemas/Amount" }
+        amount_paid:
+          $ref: "#/components/schemas/Amount"
+          description: What its payments are worth; a partial payment counts at its own quote.
+        amount_remaining: { $ref: "#/components/schemas/Amount" }
+        overpaid: { type: boolean }
+        period_start: { $ref: "#/components/schemas/Timestamp" }
+        period_end: { $ref: "#/components/schemas/Timestamp" }
+        issued_at: { $ref: "#/components/schemas/Timestamp" }
+        due_at: { $ref: "#/components/schemas/Timestamp" }
+        paid_at: { $ref: "#/components/schemas/Timestamp" }
+        voided_at: { $ref: "#/components/schemas/Timestamp" }
+        void_reason:
+          type: string
+          enum: [canceled, unpaid, replaced]
+        payments:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentID" }
+        checkout_url:
+          type: string
+          description: The invoice's page, where the subscriber picks an asset and pays.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        version: { type: integer }
+    InvoiceList:
+      type: object
+      additionalProperties: false
+      required: [object, data, has_more]
+      properties:
+        object: { type: string, const: list }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+        has_more: { type: boolean }
+    SimulateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, const: advance }
+        to:
+          type: string
+          enum: [next, invoice, due, grace_end, dunning_end, period_end]
+          description: The moment to bring to now; `next` (the default) is the next one on its schedule.
+    SimulateInvoiceRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, maxLength: 20, description: "pay: the only action." }
+        network: { $ref: "#/components/schemas/Network" }
+        asset: { $ref: "#/components/schemas/AssetSymbol" }
+    SubscriptionEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: "subscription.created, subscription.<status>, subscription.renewed or subscription.updated." }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/Subscription" }
+    InvoiceEventBody:
+      type: object
+      additionalProperties: false
+      required: [id, object, type, api_version, environment, created_at, data]
+      properties:
+        id: { $ref: "#/components/schemas/EventID" }
+        object: { type: string, const: event }
+        type: { type: string, description: "invoice.created, invoice.paid, invoice.void or invoice.reopened." }
+        api_version: { type: string, examples: ["2026-11-01"] }
+        environment: { type: string, enum: [live, sandbox, dev, test] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        data:
+          type: object
+          additionalProperties: false
+          required: [object]
+          properties:
+            object: { $ref: "#/components/schemas/Invoice" }
