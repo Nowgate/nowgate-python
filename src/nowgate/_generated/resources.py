@@ -609,8 +609,8 @@ class PayoutDestinationsResource(Resource):
     ) -> t.PayoutDestination:
         """Add a payout destination
 
-        An address of yours that payouts can pay. A new destination waits before it can be
-        paid: 24 hours in live, 5 minutes in the sandbox. `destination.created` reaches your
+        An address of yours that payouts can pay. A new destination can be paid within about a
+        minute, once Nowgate's signer has registered it. `destination.created` reaches your
         webhook endpoint at once, so your own systems can raise an alarm about an address
         nobody meant to add, and `destination.active` follows when it can be paid. Adding an
         address you already have returns that destination with `200`.
@@ -761,7 +761,7 @@ class PayoutsResource(Resource):
         """Create a payout
 
         Pays an amount of an asset you hold to one of your destinations, given by its ID or by
-        its address (a new address becomes a destination, and waits). The amount is reserved
+        its address (a new address becomes a destination). The amount is reserved
         from your available balance at once. `network_fee` is quoted in the payout's own
         asset now, as the most the network can take; once the payout is finished it is what
         the network took, and the rest returns to your balance. By default you pay it on top
@@ -1049,8 +1049,8 @@ class RefundsResource(Resource):
         it credited (before Nowgate's fee, which Nowgate keeps) less its other refunds. The
         network fee comes out of the refund unless you pay it (`fee_paid_by: merchant`).
         Without the payer's `address`, the refund waits in `awaiting_address` with a
-        `refund_url` you send them, where they give it once. Their address then waits like
-        any new destination before it is paid: 24 hours in live.
+        `refund_url` you send them, where they give it once. Their address then becomes a
+        destination, paid within about a minute.
 
         POST /payments/{id}/refunds
         """
@@ -2485,8 +2485,8 @@ class PayoutDestinationsResourceWithResponse(ResourceWithResponse):
     ) -> APIResponse[t.PayoutDestination]:
         """Add a payout destination
 
-        An address of yours that payouts can pay. A new destination waits before it can be
-        paid: 24 hours in live, 5 minutes in the sandbox. `destination.created` reaches your
+        An address of yours that payouts can pay. A new destination can be paid within about a
+        minute, once Nowgate's signer has registered it. `destination.created` reaches your
         webhook endpoint at once, so your own systems can raise an alarm about an address
         nobody meant to add, and `destination.active` follows when it can be paid. Adding an
         address you already have returns that destination with `200`.
@@ -2612,7 +2612,7 @@ class PayoutsResourceWithResponse(ResourceWithResponse):
         """Create a payout
 
         Pays an amount of an asset you hold to one of your destinations, given by its ID or by
-        its address (a new address becomes a destination, and waits). The amount is reserved
+        its address (a new address becomes a destination). The amount is reserved
         from your available balance at once. `network_fee` is quoted in the payout's own
         asset now, as the most the network can take; once the payout is finished it is what
         the network took, and the rest returns to your balance. By default you pay it on top
@@ -2846,8 +2846,8 @@ class RefundsResourceWithResponse(ResourceWithResponse):
         it credited (before Nowgate's fee, which Nowgate keeps) less its other refunds. The
         network fee comes out of the refund unless you pay it (`fee_paid_by: merchant`).
         Without the payer's `address`, the refund waits in `awaiting_address` with a
-        `refund_url` you send them, where they give it once. Their address then waits like
-        any new destination before it is paid: 24 hours in live.
+        `refund_url` you send them, where they give it once. Their address then becomes a
+        destination, paid within about a minute.
 
         POST /payments/{id}/refunds
         """
