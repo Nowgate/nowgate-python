@@ -579,7 +579,7 @@ class _PayoutRequired(TypedDict):
 
 
 class Payout(_PayoutRequired, total=False):
-    waiting_reason: Literal["liquidity", "gas_funding", "fees", "signer_limit"]
+    waiting_reason: Literal["liquidity", "gas_funding", "fees", "signer_limit", "safety_check"]
     failure_reason: str
     external_id: str
     batch: PayoutBatchID
@@ -669,7 +669,7 @@ class _RefundRequired(TypedDict):
 class Refund(_RefundRequired, total=False):
     destination: PayoutDestination
     refund_url: str
-    waiting_reason: Literal["liquidity", "gas_funding", "fees", "signer_limit"]
+    waiting_reason: Literal["liquidity", "gas_funding", "fees", "signer_limit", "safety_check"]
     failure_reason: str
     external_id: str
     approved_at: Timestamp

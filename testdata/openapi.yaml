@@ -2206,8 +2206,11 @@ components:
         destination: { $ref: "#/components/schemas/PayoutDestination" }
         waiting_reason:
           type: string
-          enum: [liquidity, gas_funding, fees, signer_limit]
-          description: Present on a queued payout that is waiting for something on Nowgate's side.
+          enum: [liquidity, gas_funding, fees, signer_limit, safety_check]
+          description: >-
+            Present on a queued payout that is waiting for something on Nowgate's side.
+            `safety_check` means Nowgate has paused payouts while it checks something: nothing is
+            lost, the payout goes out once the check is done, and you can still cancel it.
         failure_reason: { type: string, description: Present on a failed payout. }
         external_id: { type: string }
         batch: { $ref: "#/components/schemas/PayoutBatchID" }
@@ -2357,8 +2360,11 @@ components:
           description: While it is awaiting_address, the page where the payer gives their address. Send it to them.
         waiting_reason:
           type: string
-          enum: [liquidity, gas_funding, fees, signer_limit]
-          description: Present on a queued refund that is waiting for something on Nowgate's side.
+          enum: [liquidity, gas_funding, fees, signer_limit, safety_check]
+          description: >-
+            Present on a queued refund that is waiting for something on Nowgate's side.
+            `safety_check` means Nowgate has paused payouts and refunds while it checks something:
+            nothing is lost, and the refund goes out once the check is done.
         failure_reason: { type: string, description: Present on a failed refund. }
         external_id: { type: string }
         approved_at: { $ref: "#/components/schemas/Timestamp" }

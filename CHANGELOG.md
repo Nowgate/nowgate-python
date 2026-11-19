@@ -11,6 +11,8 @@ https://docs.nowgate.io/changelog.
 
 - Plans, subscriptions and invoices (`plans`, `subscriptions`, `invoices`), the sandbox's
   `simulate_subscription` and `simulate_invoice`, and the `subscription.*` and `invoice.*` events.
+- `safety_check` among a queued payout's or refund's `waiting_reason`s: Nowgate has paused payouts
+  while it checks something, and the payout goes out once the check is done.
 
 ## [0.1.0] - not yet published
 
