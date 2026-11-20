@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "nowgate"
-version = "0.1.0"
+version = "0.2.0"
 description = "The Nowgate API's Python SDK: payments, payment links, payouts and refunds, with webhook verification. No dependencies."
 readme = "README.md"
 license = "MIT"

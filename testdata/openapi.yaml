@@ -70,6 +70,47 @@ paths:
               schema: { $ref: "#/components/schemas/AssetList" }
         default: { $ref: "#/components/responses/Error" }
 
+  /accepted-assets:
+    get:
+      operationId: getAcceptedAssets
+      summary: Retrieve the assets you accept
+      description: |
+        The network-asset pairs your business accepts: the one list every checkout page
+        of yours offers from. A payment link priced in a currency or with an open
+        amount, and a subscription's invoice, offer exactly these. A payment, a link or
+        a plan in one asset needs that asset to be among them. The dashboard's settings
+        show and change the same list.
+      tags: [Assets]
+      responses:
+        "200":
+          description: Your accepted assets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AcceptedAssets" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setAcceptedAssets
+      summary: Set the assets you accept
+      description: |
+        Replaces the list, all at once, with at least one pair. It applies from that
+        moment to every checkout page of yours, the payment links you have already
+        shared among them: nothing about a link needs changing. Payments already made
+        keep their asset and complete as usual. An asset Nowgate adds later is not
+        accepted until you add it.
+      tags: [Assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptedAssets" }
+      responses:
+        "200":
+          description: Your accepted assets as set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AcceptedAssets" }
+        default: { $ref: "#/components/responses/Error" }
+
   /payment-links:
     post:
       operationId: createPaymentLink
@@ -800,8 +841,7 @@ paths:
         `payment` mode each payment's credit as it reaches your available balance, in
         `daily` mode your whole available balance once a day at `hour` UTC. Nothing under
         `min_amount` is forwarded. Forwarding payouts are ordinary payouts with
-        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`), and
-        they never wait for approval.
+        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`).
       tags: [Payouts]
       requestBody:
         required: true
@@ -1424,6 +1464,18 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/Asset" }
+    AcceptedAssets:
+      type: object
+      additionalProperties: false
+      required: [assets]
+      properties:
+        object: { type: string, const: accepted_assets, description: Ignored in a request. }
+        assets:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Pair" }
+          description: The pairs your business accepts, in the order of `GET /v1/assets`.
 
     CreatePaymentRequest:
       type: object
@@ -1657,7 +1709,7 @@ components:
         description: { type: string, maxLength: 1000 }
         price_amount:
           $ref: "#/components/schemas/FiatAmount"
-          description: A fixed price in `price_currency`; the payer picks any of `assets`.
+          description: A fixed price in `price_currency`; the payer picks any of the assets you accept.
         price_currency: { type: string, description: USD or EUR. }
         amount:
           $ref: "#/components/schemas/Amount"
@@ -1669,7 +1721,11 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/Pair" }
-          description: The pairs a payer may choose for a price in a currency. Every pair Nowgate follows if left out.
+          deprecated: true
+          description: |
+            No longer used. A link has no list of its own: it offers the assets your
+            business accepts (`GET /v1/accepted-assets`). The field is still taken, so
+            a request that sends it keeps working, and it changes nothing.
         markup_bps: { type: integer, minimum: 0, maximum: 1000 }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         expires_in:
@@ -1718,6 +1774,8 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/Pair" }
+          deprecated: true
+          description: No longer used, as on creation. It is taken and changes nothing.
         markup_bps: { type: integer, minimum: 0, maximum: 1000 }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         expires_in: { type: integer, minimum: 900, maximum: 86400 }
@@ -1755,7 +1813,9 @@ components:
         assets:
           type: array
           items: { $ref: "#/components/schemas/Pair" }
-          description: The pairs a payer may choose; empty means every pair Nowgate follows.
+          description: |
+            The pairs a payer may choose on the link now: the assets your business
+            accepts. Empty for a link priced in one asset, which takes only that one.
         markup_bps: { type: integer }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         expires_in: { type: integer }
@@ -2039,6 +2099,9 @@ components:
       type: string
       enum: [awaiting_address, awaiting_approval, scheduled, waiting_destination, queued, sending, finished,
              failed, canceled]
+      description: |
+        `awaiting_approval` is no longer used: a payout or refund doesn't wait for
+        anyone's approval, and none enters that status.
 
     Balance:
       type: object
@@ -2215,7 +2278,9 @@ components:
         external_id: { type: string }
         batch: { $ref: "#/components/schemas/PayoutBatchID" }
         send_at: { $ref: "#/components/schemas/Timestamp" }
-        approved_at: { $ref: "#/components/schemas/Timestamp" }
+        approved_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: No longer set. Present only on a payout that was approved while payouts could wait for approval.
         transaction: { type: string, description: The transaction that carries it, once sent. }
         metadata:
           type: object
@@ -2367,7 +2432,9 @@ components:
             nothing is lost, and the refund goes out once the check is done.
         failure_reason: { type: string, description: Present on a failed refund. }
         external_id: { type: string }
-        approved_at: { $ref: "#/components/schemas/Timestamp" }
+        approved_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: No longer set. Present only on a refund that was approved while refunds could wait for approval.
         transaction: { type: string, description: The transaction that carries it, once sent. }
         metadata:
           type: object
@@ -2500,7 +2567,11 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/Pair" }
-          description: For a price in a currency, the pairs a subscriber may pay with; every pair by default.
+          deprecated: true
+          description: |
+            No longer used. A plan has no list of its own: a subscriber pays with any of
+            the assets your business accepts (`GET /v1/accepted-assets`). The field is
+            still taken and changes nothing.
         markup_bps: { type: integer, minimum: 0, maximum: 1000 }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         metadata:
@@ -2521,6 +2592,8 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/Pair" }
+          deprecated: true
+          description: No longer used, as on creation. It is taken and changes nothing.
         markup_bps: { type: integer, minimum: 0, maximum: 1000 }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         metadata:
@@ -2549,6 +2622,9 @@ components:
         assets:
           type: array
           items: { $ref: "#/components/schemas/Pair" }
+          description: |
+            The pairs a subscriber may pay with now: the assets your business accepts.
+            Empty for a plan priced in one asset.
         markup_bps: { type: integer }
         fee_paid_by: { $ref: "#/components/schemas/FeePaidBy" }
         metadata:

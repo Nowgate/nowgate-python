@@ -59,6 +59,68 @@ class AssetsResource(Resource):
         )
 
 
+class AcceptedAssetsResource(Resource):
+    """accepted_assets: retrieve, update."""
+
+    def retrieve(
+        self,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ) -> t.AcceptedAssets:
+        """Retrieve the assets you accept
+
+        The network-asset pairs your business accepts: the one list every checkout page
+        of yours offers from. A payment link priced in a currency or with an open
+        amount, and a subscription's invoice, offer exactly these. A payment, a link or
+        a plan in one asset needs that asset to be among them. The dashboard's settings
+        show and change the same list.
+
+        GET /accepted-assets
+        """
+        return cast(
+            "t.AcceptedAssets",
+            self._request(
+                "GET",
+                "/accepted-assets",
+                timeout=timeout,
+                max_retries=max_retries,
+            ),
+        )
+
+    def update(
+        self,
+        *,
+        assets: List[t.Pair],
+        object: Optional[Literal["accepted_assets"]] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ) -> t.AcceptedAssets:
+        """Set the assets you accept
+
+        Replaces the list, all at once, with at least one pair. It applies from that
+        moment to every checkout page of yours, the payment links you have already
+        shared among them: nothing about a link needs changing. Payments already made
+        keep their asset and complete as usual. An asset Nowgate adds later is not
+        accepted until you add it.
+
+        PUT /accepted-assets
+        """
+        return cast(
+            "t.AcceptedAssets",
+            self._request(
+                "PUT",
+                "/accepted-assets",
+                body={
+                    "object": object,
+                    "assets": assets,
+                },
+                timeout=timeout,
+                max_retries=max_retries,
+            ),
+        )
+
+
 class RatesResource(Resource):
     """rates: list, estimate, min_amount."""
 
@@ -1228,8 +1290,7 @@ class ForwardingResource(Resource):
         `payment` mode each payment's credit as it reaches your available balance, in
         `daily` mode your whole available balance once a day at `hour` UTC. Nothing under
         `min_amount` is forwarded. Forwarding payouts are ordinary payouts with
-        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`), and
-        they never wait for approval.
+        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`).
 
         PUT /forwarding
         """
@@ -1985,6 +2046,68 @@ class AssetsResourceWithResponse(ResourceWithResponse):
             self._request(
                 "GET",
                 "/assets",
+                timeout=timeout,
+                max_retries=max_retries,
+            ),
+        )
+
+
+class AcceptedAssetsResourceWithResponse(ResourceWithResponse):
+    """accepted_assets: retrieve, update."""
+
+    def retrieve(
+        self,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ) -> APIResponse[t.AcceptedAssets]:
+        """Retrieve the assets you accept
+
+        The network-asset pairs your business accepts: the one list every checkout page
+        of yours offers from. A payment link priced in a currency or with an open
+        amount, and a subscription's invoice, offer exactly these. A payment, a link or
+        a plan in one asset needs that asset to be among them. The dashboard's settings
+        show and change the same list.
+
+        GET /accepted-assets
+        """
+        return cast(
+            "APIResponse[t.AcceptedAssets]",
+            self._request(
+                "GET",
+                "/accepted-assets",
+                timeout=timeout,
+                max_retries=max_retries,
+            ),
+        )
+
+    def update(
+        self,
+        *,
+        assets: List[t.Pair],
+        object: Optional[Literal["accepted_assets"]] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ) -> APIResponse[t.AcceptedAssets]:
+        """Set the assets you accept
+
+        Replaces the list, all at once, with at least one pair. It applies from that
+        moment to every checkout page of yours, the payment links you have already
+        shared among them: nothing about a link needs changing. Payments already made
+        keep their asset and complete as usual. An asset Nowgate adds later is not
+        accepted until you add it.
+
+        PUT /accepted-assets
+        """
+        return cast(
+            "APIResponse[t.AcceptedAssets]",
+            self._request(
+                "PUT",
+                "/accepted-assets",
+                body={
+                    "object": object,
+                    "assets": assets,
+                },
                 timeout=timeout,
                 max_retries=max_retries,
             ),
@@ -2996,8 +3119,7 @@ class ForwardingResourceWithResponse(ResourceWithResponse):
         `payment` mode each payment's credit as it reaches your available balance, in
         `daily` mode your whole available balance once a day at `hour` UTC. Nothing under
         `min_amount` is forwarded. Forwarding payouts are ordinary payouts with
-        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`), and
-        they never wait for approval.
+        `source: forwarding`; the network fee comes out of them (`fee_paid_by: payee`).
 
         PUT /forwarding
         """
@@ -3627,6 +3749,7 @@ class Resources:
 
     status: StatusResource
     assets: AssetsResource
+    accepted_assets: AcceptedAssetsResource
     rates: RatesResource
     payments: PaymentsResource
     payment_links: PaymentLinksResource
@@ -3645,6 +3768,7 @@ class Resources:
     def __init__(self, client: Requester) -> None:
         self.status = StatusResource(client)
         self.assets = AssetsResource(client)
+        self.accepted_assets = AcceptedAssetsResource(client)
         self.rates = RatesResource(client)
         self.payments = PaymentsResource(client)
         self.payment_links = PaymentLinksResource(client)
@@ -3666,6 +3790,7 @@ class ResourcesWithResponse:
 
     status: StatusResourceWithResponse
     assets: AssetsResourceWithResponse
+    accepted_assets: AcceptedAssetsResourceWithResponse
     rates: RatesResourceWithResponse
     payments: PaymentsResourceWithResponse
     payment_links: PaymentLinksResourceWithResponse
@@ -3684,6 +3809,7 @@ class ResourcesWithResponse:
     def __init__(self, client: Requester) -> None:
         self.status = StatusResourceWithResponse(client)
         self.assets = AssetsResourceWithResponse(client)
+        self.accepted_assets = AcceptedAssetsResourceWithResponse(client)
         self.rates = RatesResourceWithResponse(client)
         self.payments = PaymentsResourceWithResponse(client)
         self.payment_links = PaymentLinksResourceWithResponse(client)

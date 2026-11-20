@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, TypedDict, Union
 API_VERSION = "2026-11-01"
 """The API version this SDK was made for: the spec's info.version."""
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 """This SDK's version."""
 
 ErrorCode = Literal[
@@ -112,6 +112,14 @@ class Asset(TypedDict):
 class AssetList(TypedDict):
     object: Literal["list"]
     data: List[Asset]
+
+
+class _AcceptedAssetsRequired(TypedDict):
+    assets: List[Pair]
+
+
+class AcceptedAssets(_AcceptedAssetsRequired, total=False):
+    object: Literal["accepted_assets"]
 
 
 class _CreatePaymentRequestRequired(TypedDict):
@@ -472,6 +480,9 @@ whole amount), or `payee` out of it.
 """
 
 PayoutStatus = Literal["awaiting_address", "awaiting_approval", "scheduled", "waiting_destination", "queued", "sending", "finished", "failed", "canceled"]
+"""`awaiting_approval` is no longer used: a payout or refund doesn't wait for
+anyone's approval, and none enters that status.
+"""
 
 
 class Balance(TypedDict):
@@ -1019,6 +1030,7 @@ __all__ = [
     "NetworkStatus",
     "Asset",
     "AssetList",
+    "AcceptedAssets",
     "CreatePaymentRequest",
     "FiatAmount",
     "FeePaidBy",

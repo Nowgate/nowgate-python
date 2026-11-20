@@ -3,6 +3,8 @@
   "operations": {
     "getStatus": "status.retrieve",
     "listAssets": "assets.list",
+    "getAcceptedAssets": "acceptedAssets.retrieve",
+    "setAcceptedAssets": "acceptedAssets.update",
     "listRates": "rates.list",
     "getEstimate": "rates.estimate",
     "getMinAmount": "rates.minAmount",
